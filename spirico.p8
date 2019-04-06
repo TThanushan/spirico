@@ -6,7 +6,7 @@ __lua__
 -- by wombart
 -- initially made for the minijam 25 :
 
-local p_info = {x = 64, y = 64, tag = 'player', current_health = 0, move_speed = 1, sprites = {idle ={1, 2}, running = {17, 18, 18, 18}}, sounds = {running = 0}}
+local p_info = {x = 64, y = 64, tag = 'player', current_health = 0, move_speed = 2, sprites = {idle ={1, 2}, running = {17, 18, 18, 18}}, sounds = {running = 0}}
 local player
 local gameobjects = {}
 local game_state = 'game'
