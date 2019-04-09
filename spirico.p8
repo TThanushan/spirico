@@ -16,6 +16,7 @@ local shkx, shky = 0, 0
 local main_camera
 local gameobjects = {}
 local game_state = 'game'
+local whiteframe = false
 function _init()
     start()
 end
@@ -67,6 +68,7 @@ function update_game()
     update_all_gameobject()
     do_camera_shake()
     update_part()
+    whiteframe_update()
 end
 
 function draw_game()
@@ -95,7 +97,11 @@ function init_all_gameobject()
     make_player()
     main_camera = make_gameobject(32, 32, 'camera', {newposition = {x=0, y=0}})
 
+    -- remove
+    make_enemy(10, 0, 1, 2, 10, {running = {64, 65, 66, 65}})
 end
+
+
 
 function do_camera_shake()
     if abs(shkx)<0.1 then
@@ -127,8 +133,8 @@ function make_player()
         c_sprite=1,
         dx=0,
         dy=1, 
-        weapong_info = {bullet_sprite = 49, name = 'pistol', attack_speed = 1,
-            move_speed = 10, damage = 1, target = nil},
+        weapong_info = {reload_time = 0, bullet_sprite = 49, name = 'pistol', attack_speed = 0.5,
+            move_speed = 10, damage = 1},
         state = 'idle',
         sfx_playing = false,
         look_to_left = true,
@@ -158,15 +164,19 @@ function make_player()
                 self.state = 'idle'
             end
             if btn(4) then
-                self:shoot()
+                self:shoot(self.x+60, self.y)
             end
         end,
-        shoot = function(self)
-            local direction = 1
-            if self.look_to_left then direction = -1 end
-            local bullet = make_bullet(self.x, self.y, 1, 0, self.weapong_info.move_speed, self.weapong_info.bullet_sprite,
-                {x=self.x+1*direction, y=self.y}, 'bullet')
-            -- bullet:set_target({x=self.x+10*direction, y=self.y})
+        shoot = function(self, _x, _y)
+            if self.weapong_info.reload_time < time() then
+                self.weapong_info.reload_time = time()+self.weapong_info.attack_speed
+                local direction = 1
+                if self.look_to_left then direction = -1 end
+                local bullet = make_bullet(self.x, self.y, {x=_x*direction, y=_y}, 1, 0, self.weapong_info.move_speed, self.weapong_info.bullet_sprite,
+                    'bullet')
+            
+            end
+
         end,
         update_sprite = function(self)
             local table = self.sprites.idle
@@ -183,11 +193,16 @@ function make_player()
         draw_sprite = function(self)
             spr(self.c_sprite, self.x+shkx, self.y+shky, 1, 1, self.look_to_left)
         end,
-        player_sounds = function(self)
+        player_sounds = function (self)
             if self.state == 'running' and self.grounded and self.timer.walk_sfx_timer < time() then
                 sfx(3)
                 self.timer.walk_sfx_timer = time() + 0.5
             end
+        end,
+        take_damage = function (self, damage)
+            self.current_health -= damage
+            sfx(4)
+            whiteframe = true
         end,
         jump=function(self)
             self.grounded = false
@@ -247,62 +262,132 @@ function make_player()
     player = _player
 end
 
--- the y axis has a default value, 
-function acccurate_distance(current, target, yaxis)
-    -- if current == nil or target == nil then return nil end
-    local x0, y0, x1, y1 = current.x/100, current.y/100, target.x/100, current.y/100
-    if yaxis != nil and yaxis == true then y1 = target.y/100 end
-    return sqrt((x1 - x0)^2+(y1 - y0)^2)*100
-end
 
 
 function distance(current, target)
-    local x0, x1 = current.x/100, target.x/100
-    return abs((x1 - x0)*100)
+    return sqrt((target.x - current.x)^2 + (target.y - current.y)^2)
+end
+
+function closest_obj(target, tag)
+  local dist=0
+  local shortest_dist=32000
+  local closest=nil
+
+  for obj in all(gameobjects) do
+      if(obj:get_tag() == tag) then
+        dist = distance(target, obj)
+        if(dist < shortest_dist) then
+          closest = obj
+          shortest_dist = dist
+        end
+      end
+
+  end
+  return closest
+end
+
+
+function make_enemy (x, y, damage, health, move_speed, sprites)
+    local enemy = make_gameobject(x, y, 'enemy', {
+        damage = damage,
+        health = health,
+        move_speed = move_speed,
+        c_sprite = 0,
+        sprites = sprites,
+        attack_info = {range = 2, attack_speed = 1},
+        target = player,
+
+        enemy_collision_check = function (self)
+            if distance(self, self.target) < self.attack_info.range then
+                self:attack()
+            end
+        end,
+
+        attack = function (self)
+            self.target:take_damage(self.damage)
+        end,
+        move = function (self)
+            move_toward(self, self.target, self.move_speed)
+        end,
+        take_damage = function (self, damage)
+            self.current_health -= damage
+
+        end,
+        update_sprite = function(self)
+            local table = self.sprites.idle
+            local speed = 2
+
+            table = self.sprites.running
+            speed = self.move_speed*6
+
+            local n = flr(time()*speed%#table)+1
+            self.c_sprite = table[n]
+        end,
+        draw_sprite = function(self)
+            spr(self.c_sprite, self.x+shkx, self.y+shky, 1, 1, self.look_to_left)
+        end,
+        update = function (self)
+            self:update_sprite()
+            self:move()
+        end,
+        draw = function (self)
+            self:draw_sprite()
+        end
+
+    })
+
+    add()
+    return enemy
+end
+
+function whiteframe_update()
+    if whiteframe == true then
+        rectfill(-100,-100, 200, 200, 8)
+        whiteframe = false
+    end
 end
 
 -- ##bullet
-function make_bullet(x, y, damage, backoff, move_speed, sprite, target, tag)
+function make_bullet(x, y, direction, damage, backoff, move_speed, sprite, tag)
   local bullet = make_gameobject (x, y, tag, {
     damage=damage,
     move_speed=move_speed,
     sprite=sprite,
-    target=target,
-    direction={x=target.x, y=target.y},
+    range = 1,
+    backoff = backoff,
+    direction=direction,
     out_of_screen = function (self)
-        if (self.x < 0 or self.x > 128) or (self.y < 0 or self.y > 128) then
-            self:explode()
-            self:disable()
+        if (self.x < 8 or self.x > 118) or (self.y < 0 or self.y > 118) then
+            self:destroy()
         end
-    end,
-    set_target=function(self, target)
-      self.target = target
-      self.direction={x=target.x, y=target.y}
     end,
     explode=function(self)
       hit_part(self.x, self.y,{7, 6, 5})
+      sfx(1)
       -- if self.target:get_tag() !='player' then sfx(0) end
     end,
-    move_straight=function(self)
-      -- move_toward(self, {x=self.direction.x, y=self.y}, self.move_speed)
-      -- if(distance(self, self.target) >= 80) then self:explode() self:disable() end
+    destroy = function (self)
+        self:explode()
+        self:disable()
+    end,
+    enemy_collision_check = function (self)
+        local enemy = closest_obj(self, 'enemy')
+
+        if enemy != nil and distance(self, enemy) < self.range then
+            enemy:take_damage(self.damage)
+            -- enemy backoff
+            move_toward(self.target, self, -self.backoff)
+
+            self:destroy()
+        end
     end,
     update=function(self)
-        -- if self.target:is_alive() == false then self:disable() end
-        -- self.move_speed *= 0.98
-        self:move_straight()
         self:out_of_screen()
-        -- if(distance(self, self.target) <= 5) then
-            -- backoff the target
-            -- move_toward(self.target, self, -backoff)
+        self:enemy_collision_check()
+        move_toward(self, self.direction, self.move_speed)
 
-            -- self.target:take_damage(damage)
-
-            -- self:explode()
-            -- self:disable()
-            -- elseif self.target:is_alive() == false then
-            -- self:disable()
-        -- end
+            -- backoff the target    
+        -- move_toward(self.target, self, -self.backoff)
     end,
     draw=function(self)
 
@@ -317,26 +402,38 @@ function make_bullet(x, y, damage, backoff, move_speed, sprite, target, tag)
   
 end
 
-function accurate_move_toward(current, target, move_speed)
-    if(move_speed == 0) then move_speed = 1 end
+function closest_obj(target, tag)
+  local dist=0
+  local shortest_dist=32000
+  local closest=nil
 
-    local dist= distance(current, target)
-    if dist < 1 then return end
-    local direction_x = (target.x - current.x) / 60 * move_speed
-    local direction_y = (target.y - current.y) / 60 * move_speed
-    current.x += direction_x / dist
-    current.y += direction_y / dist
-    return current.x, current.y
+  for obj in all(gameobjects) do
+      if(obj:get_tag() == tag) then
+        dist = distance(target, obj)
+        if(dist < shortest_dist) then
+          closest = obj
+          shortest_dist = dist
+        end
+      end
+
+  end
+  return closest
 end
+
+
 
 function move_toward(current, target, move_speed)
     if(move_speed == 0) then move_speed = 1 end
 
     local dist= distance(current, target)
-    if dist < 1 then return end
     local direction_x = (target.x - current.x) / 60 * move_speed
-    current.x += direction_x / dist
-    return current.x, current.y
+    local direction_y = (target.y - current.y) / 60 * move_speed
+
+    if(dist > 0) then
+        current.x += direction_x / dist
+        current.y += direction_y / dist
+    end
+    return current.x, y
 end
 
 function shake_camera(power)
@@ -483,24 +580,17 @@ __gfx__
 00000000007777700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-06666666666666600000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-66666666666666600000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-66666666666666660000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-66666666666666660000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-66666666666666660000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-66666666666666660000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-66666666666666660000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-66666666666666660000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-66666666666666660000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-66666666666666660000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-66666666666666660000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-66666666666666660000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-66666666666666660000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-66666666666666660000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-66666666666666660000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-06666666666666600000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000077770000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000007777000777777000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+007777000777777007c7c77000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0777777007c7c7700777777000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+07c7c770077777700777777000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+07777770077777700777777000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+07777770077777700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+07777770000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 __sfx__
 00020000067200b7200f72014720187001a70020700247002c7002d70000700007000070000700007000070000700007000070000700007000070000700007000070000700007000070000700007000070000700
-00010000006003163029630226301c030110300603000600006000060000600006000060000600006000060000600006000060000600006000060000600006000060000600006000060000600006000060000600
+00010000006003163029620226101c010120100600000600006000060000600006000060000600006000060000600006000060000600006000060000600006000060000600006000060000600006000060000600
 000100000000000000010200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00010000021200010004100001000810000100001000b110001000b10000100001000010006100001000010000100001000010033100001000410001100061000010000100001000010000100001000b1000f100
+0001000000000000000000000000000002e6102701020010160100101001010010100101001010010100101000000000000000000000000000000000000000000000000000000000000000000000000000000000
