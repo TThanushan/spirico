@@ -11,7 +11,7 @@ sprites = {idle ={1, 2}, running = {17, 18, 18, 19, 20, 20}}, sounds = {running 
 local player
 local part = {}
 local g = 0.3
-local debugmode = true
+local debugmode = false
 local ground_y = 64
 local shkx, shky = 0, 0
 local main_camera
@@ -92,7 +92,6 @@ function _draw()
         print('fps:'..stat(7),main_camera.x-20, 81+main_camera.y, 11, 3)
         print('player x :'..flr(player.x)..' y '..flr(player.y), main_camera.x+10, 81+main_camera.y, 11, 3)
         print('particles:'..#part,main_camera.x-20, 87+main_camera.y, 8, 2)
-        print("wave "..spawner.wave_number,  50, 1,8, 2)
 
         -- print("ecount "..spawner.enemy_count,  50, 30,8, 2)
         -- print('particles:'..#part,main_camera.x+ 0, 93+main_camera.y, 8, 2)
@@ -210,7 +209,7 @@ function draw_next_wave_rect_timer()
     if get_time() -spawner.between_spawn_timer < 0 then
         
         local height, width = 1, 10
-        local x, y = 55, 8
+        local x, y = 55, 13
         local pourcentage_fill = ((get_time()-spawner.between_spawn_timer)+spawner.between_spawn_time)/spawner.between_spawn_time
 
         draw_filled_rect(x, y, width, height, pourcentage_fill, colors.green, colors.black)
@@ -221,6 +220,8 @@ end
 
 function draw_interface()
     draw_next_wave_rect_timer()
+    spe_print("wave "..spawner.wave_number,  50, 4, colors.red, colors.dark_purple)
+
 end
 
 -- ##spawner
