@@ -1,5 +1,5 @@
 pico-8 cartridge // http://www.pico-8.com
-version 16
+version 18
 __lua__
 
 -- spirico
@@ -7,11 +7,15 @@ __lua__
 -- initially made for the minijam:
 
 local p_info = {x = 64, y = 64, tag = 'player', max_health = 3, move_speed = 2, 
-sprites = {idle ={1, 2}, running = {17, 18, 18, 19, 20, 20}}, sounds = {running = 0}}
+money = 10, sprites = {idle ={1, 2}, running = {17, 18, 18, 19, 20, 20}}, 
+sounds = {running = 0}, weapon_info = {reload_time = 0, bullet_sprite = 49, 
+    name = 'pistol', attack_speed = 0.5,
+move_speed = 400, damage = 1, backoff = 1, collision_backoff = 10}}
+
 local player
 local part = {}
 local g = 0.3
-local debugmode = false
+local debugmode = true
 local ground_y = 64
 local shkx, shky = 0, 0
 local main_camera
@@ -38,14 +42,14 @@ local spawner_infos = {x=0, y=0, tag='spawner',
     properties={x={-30, 135, -30, 135},
     y={-30, -30, 64, 64}, wave_number=1, inprogress_timer=0, inprogress_time=1, 
     between_spawn_timer=0, between_spawn_time=5, enemy_count=0, 
-    enemy_number_to_spawn=5, alivee=0, enemy_limit = 20}}
+    enemy_number_to_spawn=10, alivee=0, enemy_limit = 20}}
 
 local enemies_shape = {
-    {damage = 1, health = 2, move_speed = 20, 
+    {tag = 'enemy_zombie', damage = 1, health = 2, move_speed = 30, 
         sprites = {running = {64, 65, 66, 67}}, flying = false},
-    {damage = 1, health = 3, move_speed = 10, 
+    {tag = 'enemy_tea_cup', damage = 1, health = 3, move_speed = 20, 
         sprites = {running = {80, 81, 82, 83}}, flying = false},
-    {damage = 1, health = 2, move_speed = 15, 
+    {tag = 'enemy_ghost', damage = 1, health = 2, move_speed = 25, 
         sprites = {running = {96, 97, 98, 99}}, flying = true}
 }
 
@@ -72,7 +76,6 @@ end
 
 function _draw()
     if game_state == 'start' then
-
     elseif game_state == 'game' then
         draw_game()
     elseif game_state == 'gameover' then
@@ -83,15 +86,17 @@ function _draw()
         -- if btnp(5) then spawner.wave_number += 1 end
         if btnp(5) then platform_button1.level += 1 end
         -- if (btn(5)) shake_v(1)
-        -- print('time:'..flr(get_time()/2),main_camera.x-64, main_camera.y-64, 8, 2)
+        -- print('time:'..flr(time()/2),main_camera.x-64, main_camera.y-64, 8, 2)
         -- print('e:'..spawner.alivee,main_camera.x-30, 30 +main_camera.y, 8, 2)
 
         -- print('mem_use:'..stat(0),main_camera.x+ 0, 30+main_camera.y, 8, 2)
         print('obj:'..#gameobjects, main_camera.x-20, main_camera.y+69, 10)
         print('cpu:'..stat(1),main_camera.x-20, main_camera.y+75, 12)
         print('fps:'..stat(7),main_camera.x-20, 81+main_camera.y, 11, 3)
-        print('player x :'..flr(player.x)..' y '..flr(player.y), main_camera.x+10, 81+main_camera.y, 11, 3)
+        -- print('player x :'..flr(player.x)..' y '..flr(player.y), main_camera.x+10, 81+main_camera.y, 11, 3)
         print('particles:'..#part,main_camera.x-20, 87+main_camera.y, 8, 2)
+        print(time(),main_camera.x+40, 87+main_camera.y, 8, 2)
+        
 
         -- print("ecount "..spawner.enemy_count,  50, 30,8, 2)
         -- print('particles:'..#part,main_camera.x+ 0, 93+main_camera.y, 8, 2)
@@ -109,18 +114,18 @@ function update_game()
     do_camera_shake()
     update_part()
     whiteframe_update()
-
+    camera_follow()
     spawn_random_enemies()
 end
 
 function draw_game()
 
     cls((spawner.wave_number%15)+1)
-    -- cls(((get_time()/2%15))+1)
+    -- cls(((time()/2%15))+1)
 
     draw_map()
-    draw_part()
     draw_all_gameobject()
+    draw_part()
     draw_interface()
     -- print(main_camera.get_tag())
 end
@@ -133,16 +138,24 @@ end
 
 function draw_all_gameobject()
     for obj in all(gameobjects) do
-        obj:draw()
+        if (obj.draw_layer == -1) obj:draw()
     end
 
+    for obj in all(gameobjects) do
+        if (obj.draw_layer == 0) obj:draw()
+    end
+    
     player:draw()
+
+    for obj in all(gameobjects) do
+        if (obj.draw_layer == 1) obj:draw()
+    end
+
+
 end
 
 
-function get_time()
-    return time()/2
-end
+
 
 
 
@@ -206,11 +219,11 @@ function draw_map()
 end
 
 function draw_next_wave_rect_timer()
-    if get_time() -spawner.between_spawn_timer < 0 then
+    if time() -spawner.between_spawn_timer < 0 then
         
         local height, width = 1, 10
         local x, y = 55, 13
-        local pourcentage_fill = ((get_time()-spawner.between_spawn_timer)+spawner.between_spawn_time)/spawner.between_spawn_time
+        local pourcentage_fill = ((time()-spawner.between_spawn_timer)+spawner.between_spawn_time)/spawner.between_spawn_time
 
         draw_filled_rect(x, y, width, height, pourcentage_fill, colors.green, colors.black)
         -- function draw_filled_rect(x0,y0,x1,y1, pc, back_col, font_col, bordercol)
@@ -227,7 +240,7 @@ end
 -- ##spawner
 function spawn_random_enemies()
     -- is the between timer over
-    if spawner.between_spawn_timer < get_time() then
+    if spawner.between_spawn_timer < time() then
         
         -- choose a random spawn position
         
@@ -239,7 +252,7 @@ function spawn_random_enemies()
         -- haven't reached the number of enemies to spawn this wave
         if spawner.enemy_count < spawner.enemy_number_to_spawn then
 
-            if spawner.inprogress_timer < get_time() then
+            if spawner.inprogress_timer < time() then
 
                     local enemy = make_enemy(spawner.x[rand_index_pos], spawner.y[rand_index_pos], shape.damage,
                      shape.health, shape.move_speed, shape.sprites, shape.flying)
@@ -248,13 +261,14 @@ function spawn_random_enemies()
                     if not enemy.flying then
                         enemy.y = 64
                     end
-                    spawner.inprogress_timer = spawner.inprogress_time + get_time()
+                    spawner.inprogress_timer = spawner.inprogress_time + time()
                     
                     spawner.alivee += 1
                     spawner.enemy_count += 1;
             end
         elseif spawner.alivee <= 0 then
-            spawner.between_spawn_timer = spawner.between_spawn_time + get_time()
+            sfx(18)
+            spawner.between_spawn_timer = spawner.between_spawn_time + time()
             spawner.enemy_count = 0 
             spawner.wave_number += 1
         end
@@ -277,8 +291,14 @@ function make_player()
         dx=0,
         dy=1, 
         level = 1,
-        weapong_info = {reload_time = 0, bullet_sprite = 49, name = 'pistol', attack_speed = 0.5,
-            move_speed = 400, damage = 1, backoff = 1, collision_backoff = 10},
+        weapon_info = {reload_time = p_info.weapon_info.reload_time, 
+            bullet_sprite = p_info.weapon_info.bullet_sprite, 
+            name = p_info.weapon_info.name, 
+            attack_speed = p_info.weapon_info.attack_speed,
+            move_speed = p_info.weapon_info.move_speed, 
+            damage = p_info.weapon_info.damage, 
+            backoff = p_info.weapon_info.backoff, 
+            collision_backoff = p_info.weapon_info.collision_backoff},
         state = 'idle',
         sfx_playing = false,
         look_to_left = true,
@@ -287,7 +307,7 @@ function make_player()
         sounds = p_info.sounds,
         sprites = p_info.sprites,
         experience=0,
-        money=0,
+        money=p_info.money,
         move_speed = p_info.move_speed,
         move = function(self)
             if btn(0) then
@@ -296,7 +316,7 @@ function make_player()
                 if not btn(4) then
                     self.look_to_left = true 
                 end
-                self:walk_particle()
+                -- self:walk_particle()
             end
             if btn(1) then
                 self.x += self.move_speed
@@ -304,7 +324,7 @@ function make_player()
                 if not btn(4) then
                     self.look_to_left = false
                 end
-                self:walk_particle()
+                -- self:walk_particle()
             end
             -- need to be falling to jump 
             if btn(2) and self.grounded and self.dy >= 0 then
@@ -319,21 +339,25 @@ function make_player()
             end
         end,
         shoot = function(self, _x, _y)
-            if self.weapong_info.reload_time < get_time() then
-                sfx(9)
-                self.weapong_info.reload_time = get_time()+self.weapong_info.attack_speed
+            if self.weapon_info.reload_time < time() then
+                local looking_direction = 1
+                if (self.look_to_left) looking_direction = -1
+                make_muzzle_flash(self.x+6*looking_direction, self.y+4, 6)
+                sfx(1)
+                sfx(15 + flr(rnd(3)))
+                self.weapon_info.reload_time = time()+self.weapon_info.attack_speed
                 local direction = 1
                 if self.look_to_left then direction = -1 end
-                self.x += self.weapong_info.backoff * -direction
+                self.x += self.weapon_info.backoff * -direction
                 
                 local bullet = make_bullet(
                     self.x,
                     self.y,
                     {x=_x*direction, y=_y},
-                    self.weapong_info.damage,
-                    self.weapong_info.collision_backoff,
-                    self.weapong_info.move_speed,
-                    self.weapong_info.bullet_sprite,
+                    self.weapon_info.damage,
+                    self.weapon_info.collision_backoff,
+                    self.weapon_info.move_speed,
+                    self.weapon_info.bullet_sprite,
                     'bullet')
             
             end
@@ -341,27 +365,27 @@ function make_player()
         end,
         update_sprite = function(self)
             local table = self.sprites.idle
-            local speed = 2
+            local speed = 8
 
             if self.state == 'running' then 
                 table = self.sprites.running
-                speed = self.move_speed*6
+                speed = self.move_speed*12
             end
 
-            local n = flr(get_time()*speed%#table)+1
+            local n = flr(time()*speed%#table)+1
             self.c_sprite = table[n]
         end,
         draw_money = function(self)
-            spe_print('$'..self.money, self.x, self.y-15, colors.green, colors.dark_green)
+            spe_print('$'..self.money, self.x-5, self.y-15, colors.green, colors.dark_green)
         end,
         draw_sprite = function(self)
-            outline_spr(self.c_sprite, self.x+shkx, self.y+shky, self.look_to_left)
-            spr(self.c_sprite, self.x+shkx, self.y+shky, 1, 1, self.look_to_left)
+            outline_spr(self.c_sprite, self.x+shkx-4, self.y+shky, self.look_to_left)
+            spr(self.c_sprite, self.x+shkx-4, self.y+shky, 1, 1, self.look_to_left)
         end,
         player_sounds = function (self)
-            if self.state == 'running' and self.grounded and self.timer.walk_sfx_timer < get_time() then
+            if self.state == 'running' and self.grounded and self.timer.walk_sfx_timer < time() then
                 sfx(3)
-                self.timer.walk_sfx_timer = get_time() + 0.25
+                self.timer.walk_sfx_timer = time() + self.move_speed/12
             end
         end,
         take_damage = function (self, damage)
@@ -427,7 +451,20 @@ function make_player()
         end,
         draw_health_rect = function (self)
             local percentage = self.current_health/self.max_health
-            draw_filled_rect(self.x, self.y-4, 7, 1, percentage, colors.green, colors.black)
+            local width, height = self.max_health*3, 2
+            local bar_x, bar_y = self.x - self.max_health-2, self.y-4
+            
+            rect(bar_x-1, bar_y-1, bar_x + width + 1, bar_y + height,
+                colors.black)
+            draw_filled_rect(bar_x, bar_y, width, height, percentage, 
+                colors.green, colors.dark_gray)
+            
+            for i=0, self.current_health do
+                pset(bar_x+i*3, bar_y, colors.dark_green)
+                pset(bar_x+i*3, bar_y+1, colors.dark_green)
+                -- print(bar_x+width/i, 50, 50+i*10)
+            end
+            -- stop()
         end,
         update = function (self)
             self:player_sounds()
@@ -444,6 +481,36 @@ function make_player()
     })
 end
 
+function camera_follow()
+    local _player= player 
+
+    local cam = main_camera
+    local dist = distance(_player, cam)
+    dist /= dist
+    local shx, shy= 0, 0
+
+
+        move_toward(cam, _player, 40) 
+    camera(cam.x-64 ,cam.y-64)
+end
+
+function make_muzzle_flash(x, y, radius, muzzle_color, duration)
+    muzzle_color = muzzle_color or colors.white
+    duration = duration or 0.05
+    make_gameobject(x, y, 'muzzle_flash', {
+        radius = radius,
+        draw_layer = 1,
+        muzzle_color = muzzle_color,
+        death_time = time()+duration,
+        update = function(self)
+            if (self.death_time < time()) self:disable() 
+        end,
+        draw = function(self)
+            circfill(self.x, self.y, self.radius, self.muzzle_color)
+        end
+        })
+end
+
 function is_player_in_this_area(x0, y0, x1, y1)
     local px, py = player.x, player.y
     return px >= x0 and px <= x1 and py >= y0 and py <= y1
@@ -453,6 +520,8 @@ function is_any_button_pressed()
     return btnp(0) or btnp(1) or btnp(2) or btnp(3) or btnp(4) or btnp(5) 
 end
 
+
+-- ##init
 function init_all_gameobject()
     make_player()
     main_camera = make_gameobject(32, 32, 'camera', {newposition = {x=0, y=0}})
@@ -476,15 +545,15 @@ function init_all_gameobject()
     
     platform_button1 = make_platform_button(10, ground_bridge.y0, 
         "platform_button_attack", 25, ground_bridge.width, colors.orange, 
-        colors.brown, 7, {5, 10, 15}, function() 
-        player.weapong_info.damage += 0.25 
-        player.weapong_info.attack_speed /= 1.15 end)
+        colors.brown, 7, {5, 10, 15}, '+attack', function() 
+        player.weapon_info.damage += 0.25 
+        player.weapon_info.attack_speed /= 1.15 end)
     -- make_platform_button(x, y, tag, width, height, col, costs, upgrade)
 
     
     platform_button1 = make_platform_button(50, ground_bridge.y0, 
         "platform_button_defense", 25, ground_bridge.width, colors.blue, 
-        colors.dark_blue, 8, {5, 10, 15}, function() 
+        colors.dark_blue, 8, {5, 10, 15}, '+defense', function() 
         player.max_health += 1
         player.current_health = player.max_health 
         end)
@@ -493,12 +562,13 @@ end
 
 -- ##platform_button
 function make_platform_button(x, y, tag, width, height, light_color, dark_color, 
-    sprite, costs, upgrade)
+    sprite, costs, shown_message, upgrade)
     
     local platform_button = make_gameobject(x, y, tag, {
         width = width,
         height = height,
         costs = costs,
+        shown_message = shown_message,
         upgrade = upgrade,
         level = 1,
         light_color = light_color,
@@ -579,9 +649,9 @@ function make_platform_button(x, y, tag, width, height, light_color, dark_color,
             player.money -= self:get_cost()
             self.level += 1
             sfx(8)
-            sfx(6)
-            show_message('+attack', player.x-10, player.y, colors.red, 
-                colors.dark_purple, 1, 2, 'level up text', true, true)
+            sfx(19)
+            show_message(self.shown_message, player.x-10, player.y, self.light_color, 
+                self.dark_color, 1, 2, 'level up text', true, true)
             
             self.upgrade()
         end,    
@@ -633,7 +703,7 @@ function show_message(text, x, y, font_color, back_color, speed, display_time_se
             end
         end,
         blink_color=function(self)
-            if(time()*self.speed%4 >= 2) then
+            if(time()*12*self.speed%4 >= 2) then
                 return true 
             else 
                 return false 
@@ -704,18 +774,18 @@ function make_enemy (x, y, damage, health, move_speed, sprites, flying)
         move_speed = move_speed,
         c_sprite = 0,
         sprites = sprites,
-        attack_info = {range = 3, attack_speed = 2, reload_time=0},
+        attack_info = {range = 3, attack_speed = 1, reload_time=0},
         target = player,
 
         enemy_collision_check = function (self)
             if distance(self, self.target) < self.attack_info.range then
                 self:attack()
             end
-        end,
-
+        end
+,
         attack = function (self)
-            if self.attack_info.reload_time < get_time() then
-                self.attack_info.reload_time = get_time()+self.attack_info.attack_speed
+            if self.attack_info.reload_time < time() then
+                self.attack_info.reload_time = time()+self.attack_info.attack_speed
                 self.target:take_damage(self.damage)
             end
         end,
@@ -744,6 +814,10 @@ function make_enemy (x, y, damage, health, move_speed, sprites, flying)
             self:give_money()
             dust_part(self.x+4, self.y+10, 3,{6, 5})
             spawner.alivee -= 1
+
+            
+            sfx(12 + flr(rnd(3)))
+            
             self:disable()
         end,
         check_if_alive = function(self)
@@ -757,9 +831,8 @@ function make_enemy (x, y, damage, health, move_speed, sprites, flying)
 
             table = self.sprites.running
             speed = self.move_speed*5
-            print(speed..self.tag)
             
-            local n = flr(get_time()/10*speed%#table)+1
+            local n = flr(time()/10*speed%#table)+1
             self.c_sprite = table[n]
         end,
         draw_sprite = function(self)
@@ -840,12 +913,12 @@ function make_bullet(x, y, direction, damage, backoff, move_speed, sprite, tag)
     damage=damage,
     move_speed=move_speed,
     sprite=sprite,
-    range = 5,
+    range = 10,
     backoff = backoff,
     direction=direction,
     out_of_screen = function (self)
         if (self.x < -2 or self.x > 128) or (self.y < 0 or self.y > 120) then
-            sfx(4)
+            -- sfx(4)
             self:destroy()
         end
     end,
@@ -860,7 +933,7 @@ function make_bullet(x, y, direction, damage, backoff, move_speed, sprite, tag)
     enemy_collision_check = function (self)
         local enemy = closest_obj(self, 'enemy')
         if enemy != nil and distance(self, enemy) < self.range then
-            sfx(1)            
+            -- sfx(1)            
             enemy:take_damage(self.damage)
             -- enemy backoff
             move_toward(enemy, {x=self.x, y=enemy.y}, -self.backoff)
@@ -938,9 +1011,12 @@ function shake_v(power)
     shky+=power*sin(shka)
 end
 
-function make_gameobject(x, y, tag, properties)
+-- ##make_gameobject
+function make_gameobject(x, y, tag, properties, draw_layer)
 
-    local obj = {x = x, y = y, tag = tag, active = true, 
+    local obj = {x = x, y = y, tag = tag, active = true,
+        -- -1 = background, 0 = middleground, 1 front
+        draw_layer = draw_layer or 0,
         get_tag = function(self)
             return self.tag
         end,
@@ -1108,15 +1184,23 @@ __gfx__
 07777770077777700777777007777770000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 07777770077777700777777007777770000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 __sfx__
-00020000067200b7200f72014720187001a70020700247002c7002d70000700007000070000700007000070000700007000070000700007000070000700007000070000700007000070000700007000070000700
-00010000336102e6102961027610226101f6101d6101b61016610136100f6100a6100a61005610036100361009600086000060000600006000060000600006000060000600006000060000600006000060000600
-000100000000000000010200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00010000021200010004100001000810000100001000b110001000b10000100001000010006100001000010000100001000010033100001000410001100061000010000100001000010000100001000b1000f100
-000100000000000000000000000012610106100901006010030100101001010010100101001010010100101000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0101000039210332102c210282102721029210242101f2101b2101821016210112100f2100f2100f2100a2100a210072100721005210032100020000200002000020000200002000020000200002000020000200
-01040000053130731308313093130a3130b3130c3130d3130e313103131231313313143131531317313193131b3131c3131f31321313233132431327313283132b3132d3132f3133231332313353133731339313
-000100000141001400014000140001400014000140010600101001020010300106001010010200103001060010100102001030010600101001020010300106001010010200103001060010100102001030010600
-000400003d61339613376133461332613306132e6132b6132a6132861326613256132361322613206131f6131d6131c6131a6131861317613156131461312613116130f6130d6130b61309613076130561302613
+01020000067400b7400f74014740187001a70020700247002c7002d70000700007000070000700007000070000700007000070000700007000070000700007000070000700007000070000700007000070000700
+01010000336402e6402964027640226401f6401d6401b64016640136400f6400a6400a64005640036400364009600086000060000600006000060000600006000060000600006000060000600006000060000600
+010100000000000000010400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+01010000021400010004100001000810000100001000b140001000b10000100001000010006100001000010000100001000010033100001000410001100061000010000100001000010000100001000b1000f100
+010100000000000000000000000012640106400904006040030400104001040010400104001040010400104000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0101000039240332402c240282402724029240242401f2401b2401824016240112400f2400f2400f2400a2400a240072400724005240032400020000200002000020000200002000020000200002000020000200
+01040000053430734308343093430a3430b3430c3430d3430e343103431234313343143431534317343193431b3431c3431f34321343233432434327343283432b3432d3432f3433234332343353433734339343
+010100000144001400014000140001400014000140010600101001020010300106001010010200103001060010100102001030010600101001020010300106001010010200103001060010100102001030010600
+010400003d64339643376433464332643306432e6432b6432a6432864326643256432364322643206431f6431d6431c6431a6431864317643156431464312643116430f6430d6430b64309643076430564302643
 010200001b3230f033276131c61018610006100761007610000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0002000036153321532f1532d1532a15327153241532315322153211531e1531e1531c1531b1531a1531a15318153171531615314153101530f1530d1530c1530e1530c1530b1530915307153071530515304153
+0102000036153321532f1532d1532a15327153241532315322153211531e1531e1531c1531b1531a1531a15318153171531615314153101530f1530d1530c1530e1530c1530b1530915307153071530515304153
 010300003963339623396133961301013010130101308003070030600304003040030300303003020030200302003020030200301003000030000300003000030000300003000030000300003000030000300003
+000200000c475152740f474186651646515264114540e6550d4550b24408445066440443502234014340062500424002240041500615000040000400004000040000400004000040000400004000040000400004
+0002000012055112550f0450e2450d0450c2450b0350a235090350823507025062250502504225030150221501015012150400503205010050760506605066050560504605046050360502605016050160501605
+01020000010541325514045142451203515235110351622510025172250e0250a2250702508225050250621503015042150400503205010050760506605066050560504605046050360502605016050160501605
+000300000c363236650935520641063311b6210432116611023210f611013110a6110361104600036000260001600016000460003600026000160001600016000160004600036000260001600016000160001600
+010200000c063236650905520641060311b6210402116611020210f611010110a6110361104100036000260001600016000460003600026000160001600016000160004600036000260001600016000160001600
+010200000c363236650935520641063311b6210432116611023210f611013110a6110361104600036000260001600016000460003600026000160001600016000160004600036000260001600016000160001600
+000500001235311353103530f3530e3530e3530d3530d3430c3430c3430b3430b3430a3430a343093330933308333083330733307333063330632305323053230432304323033230332302313023130131301313
+0005000011574160741357418074155641a064165641b054185541d0541a7541f5441b044217441d544220441f744245342103426734220242772424014297140070400704007040070400704007040070400704
