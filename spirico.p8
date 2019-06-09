@@ -6,11 +6,13 @@ __lua__
 -- by wombart
 -- initially made for the minijam:
 
-local p_info = {x = 64, y = 64, tag = 'player', max_health = 3, move_speed = 2, 
+local p_info = {x = 128, y = 64, tag = 'player', max_health = 3, move_speed = 1, 
 money = 10, sprites = {idle ={1, 2}, running = {17, 18, 18, 19, 20, 20}}, 
 sounds = {running = 0}, weapon_info = {reload_time = 0, bullet_sprite = 49, 
-    name = 'pistol', attack_speed = 0.5,
-move_speed = 400, damage = 1, backoff = 1, collision_backoff = 10}}
+    name = 'pistol', attack_speed = 0.5, move_speed = 700, damage = 1, 
+    backoff = 1, collision_backoff = 10, max_ammo = 5}}
+
+local map_limit_left_x, map_limit_right_x = 0, 300
 
 local player
 local part = {}
@@ -23,6 +25,9 @@ local gameobjects = {}
 local game_state = 'game'
 local whiteframe = false
 local spawner
+local spawner_entity_left
+local spawner_entity_right
+
 local platform_button1
 
 
@@ -30,7 +35,7 @@ local colors = {black = 0, dark_blue = 1, dark_purple = 2, dark_green = 3,
     brown = 4, dark_gray = 5, light_gray = 6, white = 7, red = 8, orange = 9,
     yellow = 10, green = 11, blue = 12, indigo = 13, pink = 14, peach = 15, no_color}
 
-local ground_bridge = {x0 = -35, y0 = 65, x1 = 276, y1 = 95, width = 15, 
+local ground_bridge = {x0 = -70, y0 = 65, x1 = 276, y1 = 95, width = 15, 
     height = 10, light_color = colors.white, dark_color = colors.light_gray}
 
 local platform1 = {x0=10, y0=45, x1=40, y1=53, hitbox_x0=4, hitbox_x1=40, 
@@ -39,8 +44,8 @@ local platform2 = {x0=90, y0=45, x1=110, y1=53, hitbox_x0=86, hitbox_x1=110,
     hitboxy=40, light_color = colors.white, dark_color = colors.light_gray}
 
 local spawner_infos = {x=0, y=0, tag='spawner', 
-    properties={x={-30, 135, -30, 135},
-    y={-30, -30, 64, 64}, wave_number=1, inprogress_timer=0, inprogress_time=1, 
+    properties={x={-30, 135},
+    y={64, 64}, wave_number=1, inprogress_timer=0, inprogress_time=1, 
     between_spawn_timer=0, between_spawn_time=5, enemy_count=0, 
     enemy_number_to_spawn=10, alivee=0, enemy_limit = 20}}
 
@@ -85,17 +90,22 @@ function _draw()
     if (debugmode) then
         -- if btnp(5) then spawner.wave_number += 1 end
         if btnp(5) then platform_button1.level += 1 end
+
+        local pos_x, pos_y = main_camera.x - 60, main_camera.y - 60
         -- if (btn(5)) shake_v(1)
         -- print('time:'..flr(time()/2),main_camera.x-64, main_camera.y-64, 8, 2)
         -- print('e:'..spawner.alivee,main_camera.x-30, 30 +main_camera.y, 8, 2)
 
         -- print('mem_use:'..stat(0),main_camera.x+ 0, 30+main_camera.y, 8, 2)
-        print('obj:'..#gameobjects, main_camera.x-20, main_camera.y+69, 10)
-        print('cpu:'..stat(1),main_camera.x-20, main_camera.y+75, 12)
-        print('fps:'..stat(7),main_camera.x-20, 81+main_camera.y, 11, 3)
-        -- print('player x :'..flr(player.x)..' y '..flr(player.y), main_camera.x+10, 81+main_camera.y, 11, 3)
-        print('particles:'..#part,main_camera.x-20, 87+main_camera.y, 8, 2)
-        print(time(),main_camera.x+40, 87+main_camera.y, 8, 2)
+        print('obj:'..#gameobjects,  pos_x, pos_y, 10)
+        print('cpu:'..stat(1), pos_x, pos_y+5, 12)
+        print('fps:'..stat(7), pos_x, pos_y+10, 11, 3)
+        -- print('player x :'..flr(player.x)..' y '..flr(player.y),  pos_x+10, 81+pos_y+10, 11, 3)
+        print('particles:'..#part, pos_x, pos_y+15, 8, 2)
+        print(time(), pos_x, pos_y+20, 8, 2)
+        print(camera_lerp_timer, pos_x, pos_y+25, 8, 2)
+        print(distance(main_camera, player), pos_x, pos_y+32, 8, 2)
+        print(btn(0), pos_x, pos_y+40, 8, 2)
         
 
         -- print("ecount "..spawner.enemy_count,  50, 30,8, 2)
@@ -109,12 +119,15 @@ function _draw()
 
 end
  
+
+
 function update_game()
+    camera_follow()
     update_all_gameobject()
     do_camera_shake()
     update_part()
     whiteframe_update()
-    camera_follow()
+    block_object_map_limit()
     spawn_random_enemies()
 end
 
@@ -122,7 +135,7 @@ function draw_game()
 
     cls((spawner.wave_number%15)+1)
     -- cls(((time()/2%15))+1)
-
+    draw_background()
     draw_map()
     draw_all_gameobject()
     draw_part()
@@ -140,7 +153,6 @@ function draw_all_gameobject()
     for obj in all(gameobjects) do
         if (obj.draw_layer == -1) obj:draw()
     end
-
     for obj in all(gameobjects) do
         if (obj.draw_layer == 0) obj:draw()
     end
@@ -176,9 +188,18 @@ function do_camera_shake()
     end
 end
 
-function draw_map()
 
-  -- outline 
+function draw_background()
+    for i=15, 0, -1 do
+        circfill(0,0, 30*i, i-10)
+
+    end
+
+end
+function draw_map()
+    
+
+    -- outline 
     rect(shkx+ground_bridge.x0-1, shky+ground_bridge.y0-1,
         shkx+ground_bridge.x1+1, shky+ground_bridge.y1+ground_bridge.height+1, 
         colors.black)
@@ -242,11 +263,9 @@ function spawn_random_enemies()
     -- is the between timer over
     if spawner.between_spawn_timer < time() then
         
-        -- choose a random spawn position
-        
-
         local shape = enemies_shape[flr(rnd(count(enemies_shape))+1)]
 
+        -- choose a random spawn position
         local rand_index_pos = flr(rnd(count(spawner.x)))+1
         
         -- haven't reached the number of enemies to spawn this wave
@@ -298,7 +317,9 @@ function make_player()
             move_speed = p_info.weapon_info.move_speed, 
             damage = p_info.weapon_info.damage, 
             backoff = p_info.weapon_info.backoff, 
-            collision_backoff = p_info.weapon_info.collision_backoff},
+            collision_backoff = p_info.weapon_info.collision_backoff,
+            current_ammo = p_info.weapon_info.max_ammo, 
+            max_ammo = p_info.weapon_info.max_ammo},
         state = 'idle',
         sfx_playing = false,
         look_to_left = true,
@@ -313,6 +334,7 @@ function make_player()
             if btn(0) then
                 self.x -= self.move_speed
                 self.state = 'running'
+                -- allow player to shoot to the right and walk to the left
                 if not btn(4) then
                     self.look_to_left = true 
                 end
@@ -385,7 +407,7 @@ function make_player()
         player_sounds = function (self)
             if self.state == 'running' and self.grounded and self.timer.walk_sfx_timer < time() then
                 sfx(3)
-                self.timer.walk_sfx_timer = time() + self.move_speed/12
+                self.timer.walk_sfx_timer = time() + self.move_speed/4
             end
         end,
         take_damage = function (self, damage)
@@ -433,21 +455,6 @@ function make_player()
             end
             
             self.y += self.dy
-            
-            -- do horizontal velocity
-            self.x += self.dx
-            if self.dx < 0.3 and self.dx > -0.3 then
-                self.dx = 0
-            elseif self.dx < 0 then
-                self.dx += 0.8
-            else 
-                self.dx -= 0.8
-            end
-
-            if self.x > 120 then
-                self.x = 120
-            elseif self.x < 0 then
-                self.x = 0 end
         end,
         draw_health_rect = function (self)
             local percentage = self.current_health/self.max_health
@@ -481,17 +488,55 @@ function make_player()
     })
 end
 
+function block_object_map_limit()
+    for obj in all(gameobjects) do
+        if type(obj.x) != 'table' and obj.tag != 'main_camera' then
+            if obj.x > map_limit_right_x then
+                obj.x = map_limit_right_x
+            elseif obj.x < map_limit_left_x then
+                obj.x = map_limit_left_x 
+            end
+        end
+    end
+end
+
+local endval = 100
+camera_lerp_timer = 0
+local b = 0
+local c = endval - b
+local d = 100
+
 function camera_follow()
-    local _player= player 
+    local destination = {x = player.x, y = player.y}
 
-    local cam = main_camera
-    local dist = distance(_player, cam)
-    dist /= dist
-    local shx, shy= 0, 0
+    if player.look_to_left then
+        destination.x -= 20
+    else
+        destination.x += 20
+    end
+    
+    if not btn(4) then 
+        if (btn(0) and player.look_to_left == false) then camera_lerp_timer = 0
+        elseif (btn(1) and player.look_to_left) then camera_lerp_timer = 0
+        end
+    end
 
+    if camera_lerp_timer < d then
+        camera_lerp_timer+=1
+    else
+        camera_lerp_timer = d
+    end
+    -- d -= distance(main_camera, player)/100
 
-        move_toward(cam, _player, 40) 
-    camera(cam.x-64 ,cam.y-64)
+    endval = destination.x
+
+    b, c = move_incubic(camera_lerp_timer, b, c, endval)
+
+    main_camera.x = b
+
+    -- move_toward(main_camera, destination, 70)
+    -- main_camera.x = player.x
+    camera(main_camera.x-64 ,main_camera.y-64)
 end
 
 function make_muzzle_flash(x, y, radius, muzzle_color, duration)
@@ -524,8 +569,9 @@ end
 -- ##init
 function init_all_gameobject()
     make_player()
-    main_camera = make_gameobject(32, 32, 'camera', {newposition = {x=0, y=0}})
-
+    main_camera = make_gameobject(128, 64, 'main_camera', {newposition = {x=0, y=0}})
+    
+    
     spawner = make_gameobject(spawner_infos.x, spawner_infos.y, spawner_infos.tag, {
         x = spawner_infos.properties.x, 
         y = spawner_infos.properties.y, 
@@ -540,8 +586,7 @@ function init_all_gameobject()
 
     })
 
--- ##current
-
+    spawner_entity_left = make_spawner(0, 57, 'spawner_entity_left')
     
     platform_button1 = make_platform_button(10, ground_bridge.y0, 
         "platform_button_attack", 25, ground_bridge.width, colors.orange, 
@@ -558,6 +603,34 @@ function init_all_gameobject()
         player.current_health = player.max_health 
         end)
 
+end
+
+-- ##current
+function make_spawner(x, y, tag)
+
+    local spawner = make_gameobject(x, y, tag, {
+        float_effect = function(self)
+            local y_add = cos(time())/6
+
+            self.y = self.y + y_add
+            
+        end,
+        draw_sprite = function(self)
+            sspr(56, 64, 8, 16, self.x, self.y-16, 16, 32)
+            
+
+        end,
+        update = function(self)
+
+            self:float_effect()
+        end,
+        draw = function(self)
+            self:draw_sprite()
+            spe_print(self.x, self.x, self.y+16)
+        end
+    })
+
+    return spawner
 end
 
 -- ##platform_button
@@ -867,6 +940,9 @@ function spe_print(text, x, y, col_in, col_out, bordercol)
     local outlinecol = 0
     if bordercol != nil then outlinecol = bordercol end
     if bordercol != 16 then
+    col_in = col_in or colors.pink
+    col_out = col_out or colors.dark_purple
+
     -- draw outline color.
     print(text, x-1+shkx, y+shky, outlinecol) 
     print(text, x+1+shkx, y+shky, outlinecol)
@@ -916,8 +992,9 @@ function make_bullet(x, y, direction, damage, backoff, move_speed, sprite, tag)
     range = 10,
     backoff = backoff,
     direction=direction,
+    end_life_time = time()+3,
     out_of_screen = function (self)
-        if (self.x < -2 or self.x > 128) or (self.y < 0 or self.y > 120) then
+        if (self.x <= map_limit_left_x or self.x >= map_limit_right_x) then
             -- sfx(4)
             self:destroy()
         end
@@ -941,7 +1018,11 @@ function make_bullet(x, y, direction, damage, backoff, move_speed, sprite, tag)
             self:destroy()
         end
     end,
+    check_end_life_time = function (self)
+        if (self.end_life_time < time()) self:destroy()
+    end,
     update=function(self)
+        self:check_end_life_time()
         self:out_of_screen()
         self:enemy_collision_check()
         move_toward(self, self.direction, self.move_speed)
@@ -979,7 +1060,37 @@ function closest_obj(target, tag)
   return closest
 end
 
+-- t = time     should go from 0 to d (duration)
+-- b = begin    value of the property being ease.
+-- c = change   ending value of the property - beginning value of the property
+-- d = duration
+-- do a loop where t should go from 0 to (d)
+-- then assign the property b with the call of the function
+-- and  assign a new value for the parameter c.
+-- exemple
+-- local endval = 15
+-- local t = 0
+-- local b = 10
+-- local c = endval - b
+-- local d = 15
+-- for var=0, d do
+--     b, c = incubic2(var, b, c, d, endval)
+--     print(b)
+-- end
 
+function incubic2 (t, b, c, d, endval)
+    c = endval - b
+    t = t / d
+    return c * (t^3) + b, endval - b
+end
+
+-- b is the value being ease
+function move_incubic(t, b, c, endval)
+    if b != endval then
+        b, c = incubic2(t, b, c, d, endval)
+    end
+    return b,c
+end
 
 function move_toward(current, target, move_speed)
     if(move_speed == 0) then move_speed = 1 end
@@ -988,7 +1099,7 @@ function move_toward(current, target, move_speed)
     local direction_x = (target.x - current.x) / 60 * move_speed
     local direction_y = (target.y - current.y) / 60 * move_speed
 
-    if(dist > 0) then
+    if(dist > 1) then
         current.x += direction_x / dist
         current.y += direction_y / dist
     end
@@ -1153,12 +1264,12 @@ __gfx__
 00000000566600000033067000330670003300000033067000330670000000000000000000000000000000000000000000000000000000000000000000000000
 00000000003300000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000007777700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000077777770000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000077777770000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000007777700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000077777700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000777777770077777000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000777777770777777700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000777777770777777700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000777777770077777000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000077777700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00003800000003800000380000033000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00003800000003300000380000038000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
@@ -1183,6 +1294,31 @@ __gfx__
 07777770077888700788877007777770000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 07777770077777700777777007777770000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 07777770077777700777777007777770000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000005550000000000000000000000000000077600000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+000005555555500000000000000000000000077767777600000c0000000800000007000000000000000000000000000000000000000000000000000000000000
+00000555555555000000000000000000000676667776660000cccc00008888000077770000000000000000000000000000000000000000000000000000000000
+0000555555555500000000000000000000776777676777000cc111c0088222800776667000000000000000000000000000000000000000000000000000000000
+000055555115555000000000000000000777677ccccc77700c1cc110082882200767766000000000000000000000000000000000000000000000000000000000
+000055552211555500000000000000000777677e22ccc776c1cccc10828888207677776000000000000000000000000000000000000000000000000000000000
+000555552e2115550000000000000000007677222e22c767c1c1cc1c828288287676776700000000000000000000000000000000000000000000000000000000
+00055555eee2115500000000000000000776772eeee2cc77c1cc1c1c828828287677676700000000000000000000000000000000000000000000000000000000
+00555552e2e2e150000000000000000077676622e2e2ec70c1cc1c1c828828287677676700000000000000000000000000000000000000000000000000000000
+00555552222e2155000000000000000077677622222e2c77c1cc1c1c828828287677676700000000000000000000000000000000000000000000000000000000
+0055552e222e215500000000000000006667762e222e2c77c1c11c1c828228287676676700000000000000000000000000000000000000000000000000000000
+0055552e22ee215500000000000000007766762e22ee2c77c11cccc0822888807667777000000000000000000000000000000000000000000000000000000000
+05555522eee22155000000000000000007766e22eee2cc660c11c1c0082282800766767000000000000000000000000000000000000000000000000000000000
+005555522222e150000000000000000000766662222cc7600ccc1cc0088828800777677000000000000000000000000000000000000000000000000000000000
+05555555222e1550000000000000000007667776222c666000ccc000008880000077700000000000000000000000000000000000000000000000000000000000
+55555555ee555555000000000000000077677776ee66677600000000000000000000000000000000000000000000000000000000000000000000000000000000
 __sfx__
 01020000067400b7400f74014740187001a70020700247002c7002d70000700007000070000700007000070000700007000070000700007000070000700007000070000700007000070000700007000070000700
 01010000336402e6402964027640226401f6401d6401b64016640136400f6400a6400a64005640036400364009600086000060000600006000060000600006000060000600006000060000600006000060000600
