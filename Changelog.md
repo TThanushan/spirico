@@ -13,3 +13,5 @@ in coming description
 ![Imgur](https://i.imgur.com/sdod3I7.gif)
 
 ## Preview 2 : 
+(10/07/19)
+![Imgur](https://i.imgur.com/zll1VY1.gif)
