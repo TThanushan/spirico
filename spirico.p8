@@ -6,10 +6,10 @@ __lua__
 -- by wombart
 -- initially made for the minijam:
 
-local p_info = {x = 64, y = 64, tag = 'player', max_health = 3, move_speed = 1, 
+local p_info = {x = 64, y = 64, tag = 'player', max_health = 3, move_speed = 2, 
 money = 10, sprites = {idle ={1, 2}, running = {17, 18, 18, 19, 20, 20}}, 
 sounds = {running = 0}, weapon_info = {reload_time = 0, bullet_sprite = 49, 
-	name = 'pistol', attack_speed = 0.5, move_speed = 700, damage = 1, 
+	name = 'pistol', attack_speed = 0.5, move_speed = 1000, damage = 1, 
 	backoff = 1, collision_backoff = 10, max_ammo = 5}}
 
 local map_limit_left_x, map_limit_right_x = 0, 300
@@ -38,23 +38,23 @@ local colors = {black = 0, dark_blue = 1, dark_purple = 2, dark_green = 3,
 local ground_bridge = {x0 = -70, y0 = 65, x1 = 276, y1 = 95, width = 15, 
 	height = 10, light_color = colors.white, dark_color = colors.light_gray}
 
-local platform1 = {x0=10, y0=45, x1=40, y1=53, hitbox_x0=4, hitbox_x1=40, 
-	hitboxy=40, light_color = colors.white, dark_color = colors.light_gray}
-local platform2 = {x0=90, y0=45, x1=110, y1=53, hitbox_x0=86, hitbox_x1=110, 
-	hitboxy=40, light_color = colors.white, dark_color = colors.light_gray}
+local platform1 = {x0=60, y0=45, x1=90, y1=53, hitboxy=40, 
+	light_color = colors.white, dark_color = colors.light_gray}
+local platform2 = {x0=130, y0=45, x1=160, y1=53, hitboxy=40,
+	light_color = colors.white, dark_color = colors.light_gray}
 
 local spawner_infos = {x=0, y=0, tag='spawner', 
-	properties={x={-30, 135},
+	properties={x={0, 200},
 	y={64, 64}, wave_number=1, inprogress_timer=0, inprogress_time=1, 
 	between_spawn_timer=0, between_spawn_time=5, enemy_count=0, 
 	enemy_number_to_spawn=10, alivee=0, enemy_limit = 20}}
 
 local enemies_shape = {
-	{tag = 'enemy_zombie', damage = 1, health = 2, move_speed = 30, 
+	{tag = 'enemy_zombie', damage = 1, health = 1, move_speed = 30, 
 		sprites = {running = {64, 65, 66, 67}}, flying = false},
-	{tag = 'enemy_tea_cup', damage = 1, health = 3, move_speed = 20, 
+	{tag = 'enemy_tea_cup', damage = 1, health = 2, move_speed = 20, 
 		sprites = {running = {80, 81, 82, 83}}, flying = false},
-	{tag = 'enemy_ghost', damage = 1, health = 2, move_speed = 25, 
+	{tag = 'enemy_ghost', damage = 1, health = 1, move_speed = 25, 
 		sprites = {running = {96, 97, 98, 99}}, flying = true}
 }
 
@@ -295,8 +295,10 @@ function spawn_random_enemies()
 end
 
 function is_player_on_a_platform()
-	return (player.x >= platform1.hitbox_x0 and player.x <= platform1.hitbox_x1 and (player.y > platform1.hitboxy-3 and player.y < platform1.hitboxy+3)) or
-	(player.x > platform2.hitbox_x0 and player.x < platform2.hitbox_x1 and (player.y > platform2.hitboxy-3 and player.y < platform2.hitboxy+3))
+	return (player.x >= platform1.x0 and player.x <= platform1.x1
+		and (player.y > platform1.hitboxy-3 and player.y < platform1.hitboxy+3))
+		or (player.x > platform2.x0 and player.x < platform2.x1
+		and (player.y > platform2.hitboxy-3 and player.y < platform2.hitboxy+3))
 end
 
 -- ##player
@@ -363,13 +365,14 @@ function make_player()
 				local looking_direction = 1
 				if (self.look_to_left) looking_direction = -1
 				make_muzzle_flash(self.x+6*looking_direction, self.y+4, 6)
+				-- sfx(20 + flr(rnd(2)))
 				sfx(1)
 				sfx(15 + flr(rnd(3)))
 				self.weapon_info.reload_time = time()+self.weapon_info.attack_speed
 				local direction = 1
 				if self.look_to_left then direction = -1 end
 				self.x += self.weapon_info.backoff * -direction
-				
+
 				local bullet = make_bullet(
 					self.x,
 					self.y,
@@ -379,7 +382,7 @@ function make_player()
 					self.weapon_info.move_speed,
 					self.weapon_info.bullet_sprite,
 					'bullet')
-			
+				shake_h(2)
 			end
 
 		end,
@@ -502,7 +505,7 @@ local endval = 100
 camera_lerp_timer = 0
 local b = 0
 local c = endval - b
-local d = 100
+local d = 25
 
 function camera_follow()
 	local destination = {x = player.x, y = player.y}
@@ -520,7 +523,7 @@ function camera_follow()
 	end
 
 	if camera_lerp_timer < d then
-		camera_lerp_timer+=1
+		camera_lerp_timer+=0.5
 	else
 		camera_lerp_timer = d
 	end
@@ -586,7 +589,7 @@ function init_all_gameobject()
 	spawner_entity_left = make_spawner(0, 58, 200, 'enemy')
 	spawner_entity_right = make_spawner(200, 58, 200, 'enemy')
 	
-	platform_button1 = make_platform_button(10, ground_bridge.y0, 
+	platform_button1 = make_platform_button(60, ground_bridge.y0, 
 		"platform_button_attack", 25, ground_bridge.width, colors.orange, 
 		colors.brown, 7, {5, 10, 15}, '+attack', function() 
 		player.weapon_info.damage += 0.25 
@@ -594,7 +597,7 @@ function init_all_gameobject()
 	-- make_platform_button(x, y, tag, width, height, col, costs, upgrade)
 
 	
-	platform_button1 = make_platform_button(50, ground_bridge.y0, 
+	platform_button1 = make_platform_button(100, ground_bridge.y0, 
 		"platform_button_defense", 25, ground_bridge.width, colors.blue, 
 		colors.dark_blue, 8, {5, 10, 15}, '+defense', function() 
 		player.max_health += 1
@@ -615,6 +618,8 @@ function make_spawner(x, y, health, tag)
 			self.y = self.y + y_add
 		end,
 		take_damage = function(self, damage)
+			show_message('-'..flr(damage), self.x+rnd(5), self.y+rnd(4), colors.red, 
+			colors.dark_purple, 4, 0,  1, 'damage_text', true, false)
 			self.current_health -= damage
 			self.blinking = 6
 		end,
@@ -645,7 +650,7 @@ function make_spawner(x, y, health, tag)
 		end,
 		draw = function(self)
 			self:draw_sprite()
-			spe_print(self.current_health, self.x, self.y+16, 8, 0)
+			spe_print(flr(self.current_health), self.x, self.y+16, 8, 0)
 		end
 	})
 
@@ -671,16 +676,16 @@ function make_platform_button(x, y, tag, width, height, light_color, dark_color,
 		seconds_to_buy=3,
 		second_surface_height = 10,
 		draw_button_rect = function(self)
-			rectfill(self.x, self.y, self.x+self.width, self.y+self.height, self.light_color)
+			rectfill(self.x+shkx, self.y+shky, self.x+shkx+self.width, self.y+shky+self.height, self.light_color)
 
-			rectfill(self.x, self.y+height, self.x+self.width, self.y+self.height+10, self.dark_color)
+			rectfill(self.x+shkx, self.y+shky+height, self.x+shkx+self.width, self.y+shky+self.height+10, self.dark_color)
 
-			rect(self.x, self.y-1, self.x+self.width, self.y+self.height+self.second_surface_height, colors.black)
+			rect(self.x+shkx, self.y+shky-1, self.x+shkx+self.width, self.y+shky+self.height+self.second_surface_height, colors.black)
 
 		end,
 		draw_button_sprite = function(self)
 			
-			spr(self.sprite, self.x+self.width/3, self.y+self.height+1)
+			spr(self.sprite, self.x+shkx+self.width/3, self.y+shky+self.height+1)
 			-- spr(n,x,y,w,h,flip_x,flip_y)
 		end,
 		is_player_money_greater_than_cost = function(self)
@@ -691,7 +696,7 @@ function make_platform_button(x, y, tag, width, height, light_color, dark_color,
 				return
 			end
 			if is_player_in_this_area(self.x, self.y-5, self.x+self.width, 
-				self.y + self.height) and not is_any_button_pressed() then
+				self.y + self.height) and not (btn(0) or btn(1))  then
 
 				if self.pressed_timer <= self.seconds_to_buy then
 					
@@ -715,7 +720,7 @@ function make_platform_button(x, y, tag, width, height, light_color, dark_color,
 				colors.white)
 		end,
 		draw_level = function(self)
-			spe_print(self.level,  self.x+12, self.y+self.height+14, self.light_color, self.dark_color )
+			spe_print(self.level,  self.x-shkx+12, self.y-shky+self.height+14, self.light_color, self.dark_color )
 		end,
 		get_cost = function(self)
 			local cost
@@ -735,7 +740,7 @@ function make_platform_button(x, y, tag, width, height, light_color, dark_color,
 				font_color, back_color = colors.red, colors.dark_purple
 			end
 
-			spe_print('$'..cost, self.x+self.width+2, self.y+self.height+14, font_color, back_color)
+			spe_print('$'..cost, self.x-shkx+self.width+2, self.y-shky+self.height+14, font_color, back_color)
 		end,
 		button_pressed = function(self)
 			player.money -= self:get_cost()
@@ -743,7 +748,7 @@ function make_platform_button(x, y, tag, width, height, light_color, dark_color,
 			sfx(8)
 			sfx(19)
 			show_message(self.shown_message, player.x-10, player.y, self.light_color, 
-				self.dark_color, 1, 2, 'level up text', true, true)
+				self.dark_color, 1, 1, 2, 'level up text', true, true)
 			
 			self.upgrade()
 		end,    
@@ -763,30 +768,31 @@ function make_platform_button(x, y, tag, width, height, light_color, dark_color,
 end
 
 -- ##show_message
-function show_message(text, x, y, font_color, back_color, speed, display_time_setter, tag, moving, blinking)
+function show_message(text, x, y, font_color, back_color, move_speed, 
+	blinking_speed,	display_time_setter, tag, moving, blinking)
 	
 	local msg = make_gameobject(x, y, tag, {
 		text= text, 
 		font_color = font_color,
 		back_color = back_color,
 		blinking = blinking,
-		speed = speed,
-		moving_speed=3,
+		blinking_speed = blinking_speed,
+		move_speed=move_speed,
 		display_time = time()+display_time_setter,
-		set_properties = function(self, text, second_parameter_x, second_parameter_y, font_color, back_color, speed, display_time)
+		set_properties = function(self, text, second_parameter_x, second_parameter_y, font_color, back_color, blinking_speed, display_time)
 			self.text=text
 			self.x=second_parameter_x
 			self.y=second_parameter_y
 			self.font_color=font_color
 			self.back_color=back_color
-			self.speed=speed
+			self.blinking_speed=blinking_speed
 			self.display_time=time()+display_time
 		end,
 		update=function(self)
 			if moving then 
-				self.y -= self.moving_speed 
-				if(self.moving_speed>=0.1) then 
-					self.moving_speed*=0.8 
+				self.y -= self.move_speed 
+				if(self.move_speed>=0.1) then 
+					self.move_speed*=0.8 
 				end
 			end
 
@@ -795,7 +801,7 @@ function show_message(text, x, y, font_color, back_color, speed, display_time_se
 			end
 		end,
 		blink_color=function(self)
-			if(time()*12*self.speed%4 >= 2) then
+			if(time()*12*self.blinking_speed%4 >= 2) then
 				return true 
 			else 
 				return false 
@@ -815,7 +821,7 @@ function show_message(text, x, y, font_color, back_color, speed, display_time_se
 	})
 
 	-- if msg != nil then
-	msg:set_properties(text, x, y, font_color, back_color, speed, display_time_setter)
+	msg:set_properties(text, x, y, font_color, back_color, blinking_speed, display_time_setter)
 	return msg
 	-- end
 
@@ -865,6 +871,7 @@ function make_enemy (x, y, damage, health, move_speed, sprites, flying)
 		current_health = health,
 		move_speed = move_speed,
 		c_sprite = 0,
+		blinking = 0,
 		sprites = sprites,
 		attack_info = {range = 3, attack_speed = 1, reload_time=0},
 		target = player,
@@ -873,14 +880,13 @@ function make_enemy (x, y, damage, health, move_speed, sprites, flying)
 			if distance(self, self.target) < self.attack_info.range then
 				self:attack()
 			end
-		end
-,
+		end,
 		attack = function (self)
 			if self.attack_info.reload_time < time() then
 				self.attack_info.reload_time = time()+self.attack_info.attack_speed
 				self.target:take_damage(self.damage)
 			end
-		end,
+		 end,
 		move = function (self)
 			if(distance(self, self.target) >= self.attack_info.range) then
 				if not self.flying then
@@ -893,23 +899,27 @@ function make_enemy (x, y, damage, health, move_speed, sprites, flying)
 			end
 		end,
 		take_damage = function (self, damage)
+			show_message('-'..flr(damage), self.x, self.y, colors.red, 
+			colors.dark_purple, 4, 0,  1, 'damage_text', true, false)
 			self.current_health -= damage
-
+			self.blinking = 2
+			sfx(12)
 		end,
 		give_money = function(self)
 			local money = flr(self.max_health/3) + 1
 			player.money += money
 			show_message('+$'..money, self.x, self.y, colors.green, 
-				colors.dark_green, 15,  2, 'gained_money_text', true, false)
+				colors.dark_green, 2, 0,  2, 'gained_money_text', true, false)
 		end,
 		destroy = function (self)
 			self:give_money()
-			dust_part(self.x+4, self.y+10, 3,{6, 5})
+			dust_part(self.x, self.y, 6,{colors.white, colors.red , colors.dark_purple}, 3)
 			spawner.alivee -= 1
 
-			
+			sfx(20)
 			sfx(12 + flr(rnd(3)))
-			
+			shake_camera(4)
+
 			self:disable()
 		end,
 		check_if_alive = function(self)
@@ -934,9 +944,21 @@ function make_enemy (x, y, damage, health, move_speed, sprites, flying)
 			else
 				 self.look_to_left = false
 			end
-			outline_spr(self.c_sprite, self.x+shkx, self.y+shky, self.look_to_left)
+			-- local col = 0
+			if (self.blinking > 0) then
+				-- col = 7
+				for i=0, 15, 1 do
+					pal(i, 8)
+				end
+				spr(self.c_sprite, self.x+shkx, self.y+shky, 1, 1, self.look_to_left)
+				pal()			
+				self.blinking -= 1
+			else
+				outline_spr(self.c_sprite, self.x+shkx, self.y+shky, 
+					self.look_to_left, false, col)
 
-			spr(self.c_sprite, self.x+shkx, self.y+shky, 1, 1, self.look_to_left)
+				spr(self.c_sprite, self.x+shkx, self.y+shky, 1, 1, self.look_to_left)
+			end
 		end,
 		update = function (self)
 			self:check_if_alive()
@@ -963,21 +985,21 @@ function spe_print(text, x, y, col_in, col_out, bordercol)
 	col_out = col_out or colors.dark_purple
 
 	-- draw outline color.
-	print(text, x-1+shkx, y+shky, outlinecol) 
-	print(text, x+1+shkx, y+shky, outlinecol)
-	print(text, x+1+shkx, y-1+shky, outlinecol)
-	print(text, x-1+shkx, y-1+shky, outlinecol)
-	print(text, x+shkx, y-1+shky, outlinecol)
-	print(text, x+1+shkx, y+1+shky, outlinecol)
-	print(text, x-1+shkx, y+1+shky, outlinecol)
-	print(text, x+1+shkx, y+2+shky, outlinecol)
-	print(text, x-1+shkx, y+2+shky, outlinecol)
-	print(text, x+shkx, y+2+shky, outlinecol)
+	print(text, x-1, y, outlinecol) 
+	print(text, x+1, y, outlinecol)
+	print(text, x+1, y-1, outlinecol)
+	print(text, x-1, y-1, outlinecol)
+	print(text, x, y-1, outlinecol)
+	print(text, x+1, y+1, outlinecol)
+	print(text, x-1, y+1, outlinecol)
+	print(text, x+1, y+2, outlinecol)
+	print(text, x-1, y+2, outlinecol)
+	print(text, x, y+2, outlinecol)
 	end
 	-- draw col_out.
-	print(text, shkx+x, shky+y+1, col_out)
+	print(text,x, y+1, col_out)
 	-- draw text.
-	print(text, shkx+x, shky+y, col_in)
+	print(text,x, y, col_in)
 end
 
 function whiteframe_update()
@@ -1052,7 +1074,6 @@ function make_bullet(x, y, direction, damage, backoff, move_speed, sprite, tag)
 	draw=function(self)
 		outline_spr(self.sprite, self.x+shkx, self.y+shky)
 		spr(self.sprite, self.x+shkx, self.y+shky)
-		pal()
 	end,
 	reset=function(self)
 	  self:enable()
@@ -1226,8 +1247,11 @@ function update_part()
 	end
 end
 
-function dust_part(x, y, size, colarr)  
-	add_part(rnd(5)-rnd(5)+x, rnd(5)-rnd(5)+y, 1, rnd(size)+size-1, rnd(5)+35, (rnd(10)-rnd(10))/30, (rnd(10)-rnd(10))/30, colarr)
+function dust_part(x, y, size, colarr, number)
+	number = number or 0
+	for i=0, number, 1 do
+		add_part(rnd(5)-rnd(5)+x, rnd(5)-rnd(5)+y, 1, rnd(size)+size-1, rnd(5)+35, (rnd(10)-rnd(10))/30, (rnd(10)-rnd(10))/30, colarr)
+	end  
 end
 
 function hit_part(x, y, colarr) 
@@ -1283,12 +1307,12 @@ __gfx__
 00000000566600000033067000330670003300000033067000330670000000000000000000000000000000000000000000000000000000000000000000000000
 00000000003300000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000077777700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000777777770077777000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000777777770777777700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000777777770777777700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000777777770077777000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000077777700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000777777000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000007777707777777700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000077777777777777700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000077777777777777700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000007777700777777000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00003800000003800000380000033000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00003800000003300000380000038000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
@@ -1338,7 +1362,7 @@ __gfx__
 0000000000000000000000000000000000000000000000000ccc1cc0088828800777677000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000ccc000008880000077700000000000000000000000000000000000000000000000000000000000
 __sfx__
-01020000067400b7400f74014740187001a70020700247002c7002d70000700007000070000700007000070000700007000070000700007000070000700007000070000700007000070000700007000070000700
+00020000067400b7400f74014740187001a70020700247002c7002d70000700007000070000700007000070000700007000070000700007000070000700007000070000700007000070000700007000070000700
 01010000336402e6402964027640226401f6401d6401b64016640136400f6400a6400a64005640036400364009600086000060000600006000060000600006000060000600006000060000600006000060000600
 010100000000000000010400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 01010000021400010004100001000810000100001000b140001000b10000100001000010006100001000010000100001000010033100001000410001100061000010000100001000010000100001000b1000f100
@@ -1358,3 +1382,7 @@ __sfx__
 010200000c363236650935520641063311b6210432116611023210f611013110a6110361104600036000260001600016000460003600026000160001600016000160004600036000260001600016000160001600
 000500001235311353103530f3530e3530e3530d3530d3430c3430c3430b3430b3430a3430a343093330933308333083330733307333063330632305323053230432304323033230332302313023130131301313
 0005000011574160741357418074155641a064165641b054185541d0541a7541f5441b044217441d544220441f744245342103426734220242772424014297140070400704007040070400704007040070400704
+000200003d650346502c650236501a650056502a60027600246001960021600176001d600006001a6000060015600166001360000600006000060000600006000060000600006000060000600006000060000600
+00010000336302e6302963027630226301f6301d6301b63016630136300f6300a6300a63005630036300363009600086000060000600006000060000600006000060000600006000060000600006000060000600
+01010000166301e6302963027630226301f6301d6301b63016630136300f6300a6300a60005600036000360009600086000060000600006000060000600006000060000600006000060000600006000060000600
+00010000166001e6002960027600226001f6001d6001b60016600136000f6000a6000a60005600036000360009600086000060000600006000060000600006000060000600006000060000600006000060000600
